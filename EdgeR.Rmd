@@ -1,0 +1,219 @@
+```{r setup}
+knitr::opts_knit$set(root.dir = '/mnt/alessandro/Volume/Maria')
+```
+
+```{r Library Loading}
+mypaths <- c('/home/alessandro/R/x86_64-pc-linux-gnu-library/4.1/','/home/alessandro2/R/x86_64-pc-linux-gnu-library/4.1/')
+.libPaths(mypaths)
+library("tibble")
+library("limma")
+library("edgeR")
+library("tximport")
+library("readr")
+library("dplyr")
+library("stringr")
+library("biomaRt")
+library("corrr")
+library("ggcorrplot")
+library("ggplot2")
+library("FactoMineR")
+library("factoextra")
+
+
+```
+
+```{r}
+library(GenomicFeatures)
+
+# Build TxDb from GTF
+txdb <- makeTxDbFromGFF("data/genome/Homo_sapiens.GRCh38.99.gtf", format="gtf")
+
+# Extract tx2gene mapping
+k <- keys(txdb, keytype = "TXNAME")
+tx2gene <- select(txdb, keys = k, columns = c("GENEID"), keytype = "TXNAME")
+
+# Save to file
+write.table(tx2gene, file = "tx2gene.tsv", sep = "\t", row.names = FALSE, quote = FALSE)
+
+
+```
+
+
+```{r Loading}
+srat <- read.csv('/mnt/alessandro/Volume/Maria/data/table/GSE171117.SraRunTable.csv')
+samples <- srat$Run
+
+files <- file.path("data/Thesis/Salmon_Out/", samples, "quant.sf")
+names(files) <- samples
+
+tx2gene <-read_csv('data/genome/tx2gene.txt',show_col_types = FALSE)
+
+txi <- tximport(files, type = "salmon", tx2gene = tx2gene)
+```
+
+```{r Extracting Raw Counts}
+counts <- txi$counts
+
+data.table::fwrite(counts, "data/table/OMOMYC_RAW_counts.csv.gz",row.names = TRUE)
+
+
+```
+
+```{r Normalizing}
+tpm <- txi$abundance
+data.table::fwrite(tpm, "data/table/OMOMYC_tpm.csv.gz",row.names = TRUE)
+
+counts <- txi$counts
+lengths <- txi$length
+
+# Convert gene lengths to kilobases
+gene_length_kb <- lengths / 1000
+
+# Get library sizes (column sums of raw counts)
+lib_sizes <- colSums(counts)
+
+# Create FPKM matrix
+fpkm <- sweep(counts, 1, gene_length_kb, FUN = "/")           # Divide by gene length
+fpkm <- sweep(fpkm, 2, lib_sizes / 1e6, FUN = "/")             # Divide by library size in millions
+
+
+log_tpm <- log2(tpm + 1)
+
+keep <- rowMeans(log_tpm) > 1  
+log_tpm <- log_tpm[keep, ]
+
+expr <- t(log_tpm)  # rows = samples, columns = genes
+
+data.table::fwrite(log_tpm, "data/table/OMOMYC_Log2tpm.csv.gz",row.names = TRUE)
+
+```
+
+Had to switch to the pulled dataset because the 160 samples came from 40 patient, so it better to sum the counts from each patient for each gene 
+
+```{r filtering + computing fpkm}
+
+meta <- srat[c('Run','treatment')] %>% 
+  column_to_rownames(var = "Run")
+
+
+counts <- counts[, colSums(counts) > 0]  # Remove zero-count samples
+counts <- counts[rowSums(counts) > 0, ]  # Remove non-expressed genes
+
+
+
+#calcnormfactors to get normalized CPM and from those with lenghts get FPKM
+
+
+#Create DGEList
+dge <- DGEList(counts = counts) 
+
+#Calculate normalization factors
+dge <- calcNormFactors(dge)
+
+dge$counts
+
+lengths <- txi$length
+
+common_genes <- intersect(rownames(counts), rownames(lengths)) #Making sure the genes match after filtering 
+counts <- counts[common_genes, ]
+
+
+# Mean effective gene length across samples / THE AVERAGE PER GENE ACROSS EACH PATIENT
+gene_lengths <- rowMeans(lengths[common_genes, ])
+
+# Ensure it's named and aligned
+gene_lengths <- gene_lengths[rownames(counts)]
+stopifnot(all(rownames(counts) == names(gene_lengths)))
+
+# Now compute FPKM
+
+
+dge <- DGEList(counts = counts)
+dge <- calcNormFactors(dge)
+
+cpm<- cpm(dge, normalized.lib.sizes = TRUE)
+fpkm <- rpkm(dge, gene.length = gene_lengths)
+
+#fpkm <- rpkm(dge, gene.length = lengths)
+
+
+fpkm <- fpkm[rowSums(fpkm) > 1 , ] 
+
+data.table::fwrite(fpkm, "data/table/OMOMYC_FPKM.csv.gz",row.names = TRUE)
+
+log2_fpkm <- log2(fpkm + 1)
+
+#data.table::fwrite(log2_fpkm, "data/table/OMOMYC_FPKM.csv.gz",row.names = TRUE)
+
+all(colnames(fpkm) %in% rownames(meta))
+
+
+```
+
+```{r FILTERING FPKM TABLE}
+# Match meta to fpkm column names
+meta <- meta[colnames(fpkm), , drop=FALSE]
+
+# Identify groups based on rownames
+normal <- rownames(meta)[meta$treatment == "untreated"]
+treated <- rownames(meta)[meta$treatment == "MYC-inhibited"]
+
+# Apply filtering
+condition1 <- apply(fpkm[, normal], 1, function(x) sum(x > 1) >= 2)
+condition2 <- apply(fpkm[, treated], 1, function(x) sum(x > 1) >= 2)
+
+# Keep genes that pass both conditions
+filtered_fpkm <- fpkm[condition1 & condition2, ]
+
+# Export
+data.table::fwrite(filtered_fpkm, "data/table/OMOMYC_FILTERED_FPKM.csv.gz", row.names = TRUE)
+
+
+
+```
+
+```{r}
+
+# Ensure meta and counts are matched
+meta <- meta[colnames(counts), , drop=FALSE]
+
+# Create group factor
+group <- factor(meta$treatment)
+
+# Set untreated as reference (optional but recommended)
+group <- relevel(group, ref="untreated")
+
+# Create DGEList object
+dge <- DGEList(counts=counts, group=group)
+
+# Filter out lowly expressed genes
+keep <- filterByExpr(dge)
+dge <- dge[keep, , keep.lib.sizes=FALSE]
+
+# Normalize counts (TMM normalization)
+dge <- calcNormFactors(dge)
+
+# Design matrix for the model
+design <- model.matrix(~ group)
+
+# Estimate dispersion
+dge <- estimateDisp(dge, design)
+
+# Fit model
+fit <- glmFit(dge, design)
+
+# Likelihood ratio test
+lrt <- glmLRT(fit)
+
+# Extract all results
+res <- topTags(lrt, n=Inf)
+
+# Convert to data frame
+res_df <- as.data.frame(res)
+res_df$gene <- rownames(res_df)
+
+# Save results to file
+write.csv(res_df, "data/table/OMOMYC_EDGER_RESULTS.csv", row.names=FALSE)
+
+
+```
