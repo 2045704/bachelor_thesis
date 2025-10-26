@@ -1,26 +1,40 @@
-This small repository contains the main codes developed by me during my internship in my third year.
+# Internship Bioinformatics Scripts
 
-Data files were obtained from:
+This repository contains the main scripts I developed during my internship in my third year.
 
-Patient data: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE124814
+## Data Sources
 
-Cell line data: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE171117
+- **Patient data:** [GSE124814](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE124814)  
+- **Cell line data:** [GSE171117](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE171117)
 
-The description of the scripts goes as follows:
+---
 
-**PYTHON SCRIPTS**
+## Description of Scripts
 
-- R4: This script contains the class which sets up and runs the command line prompts required for usage of some of the bioinformatic tools
-- PROCESS1: This script calls on the functions of the class contained in R4 to process the RNA-Sequencing data, processing as follows
-   - Download of the samples with SRA toolkit
-   - Quality control of downloaded samples with FastQC
-   - Trimming of fastq files with Cutadapt tool
-   - Quality control after trimming wit FastQC
-   - Alignment with Salmon
-   - Removal of downloaded fastq file for space-sake
-- Patient_Analysis: Jupyter notebook in which the patient-derived data was analysed, then crossed with the sequencing data from the cell line
+### Python Scripts
 
-**R SCRIPTS**
+**R4**  
+This script defines a class that sets up and runs the command-line prompts required for several bioinformatic tools.
 
-- BM: Biomart script to obtain gene symbols
-- EdgeR: Differential expression pipeline ran after obtaining the aligned reads from the cell line data.
+**PROCESS1**  
+This script calls the functions of the class defined in *R4* to process RNA-sequencing data.  
+The pipeline includes:  
+- Downloading samples using the SRA Toolkit  
+- Performing quality control on downloaded samples with FastQC  
+- Trimming FASTQ files using Cutadapt  
+- Running a second round of quality control with FastQC  
+- Aligning reads with Salmon  
+- Removing downloaded FASTQ files to save disk space  
+
+**Patient_Analysis**  
+A Jupyter Notebook in which the patient-derived data were analyzed and compared with the sequencing data from the cell line.
+
+---
+
+### R Scripts
+
+**BM**  
+Biomart script used to obtain gene symbols.
+
+**EdgeR**  
+Differential expression analysis pipeline performed after obtaining the aligned reads from the cell line data.
