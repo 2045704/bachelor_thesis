@@ -7,8 +7,6 @@ This repository contains the main scripts I developed during my internship in my
 - **Patient data:** [GSE124814](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE124814)  
 - **Cell line data:** [GSE171117](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE171117)
 
----
-
 ## Description of Scripts
 
 ### Python Scripts
@@ -29,7 +27,6 @@ The pipeline includes:
 **Patient_Analysis**  
 A Jupyter Notebook in which the patient-derived data were analyzed and compared with the sequencing data from the cell line.
 
----
 
 ### R Scripts
 
