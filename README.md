@@ -1,4 +1,4 @@
-# Internship Bioinformatics Scripts
+# Internship Bioinformatic Scripts
 
 This repository contains the main scripts I developed during my internship in my third year.
 
